@@ -1,4 +1,4 @@
-"""Small macOS-friendly desktop front end for :mod:`serum2vital`.
+"""Small desktop front end for :mod:`serum2vital` on macOS and Windows.
 
 The GUI deliberately runs the existing command line interface in a child
 process.  That keeps one conversion path, makes cancellation reliable, and
@@ -20,6 +20,27 @@ LAYOUT_PRESERVE = "preserve"
 LAYOUT_ORGANIZE = "organize"
 LAYOUT_FLATTEN = "flatten"
 LAYOUTS = {LAYOUT_PRESERVE, LAYOUT_ORGANIZE, LAYOUT_FLATTEN}
+
+
+def worker_python_executable(
+    executable: str | os.PathLike[str] | None = None,
+    *,
+    platform: str | None = None,
+) -> str:
+    """Return a Python executable whose stdout/stderr can be captured.
+
+    Windows GUI entry points run under ``pythonw.exe``.  A conversion started
+    with that executable has no standard streams, so use ``python.exe`` from
+    the same environment for the QProcess worker when it is available.
+    """
+    selected = os.fspath(executable) if executable is not None else sys.executable
+    current_platform = platform if platform is not None else sys.platform
+    path = Path(selected)
+    if current_platform.startswith("win") and path.name.lower() == "pythonw.exe":
+        console_python = path.with_name("python.exe")
+        if console_python.is_file():
+            return str(console_python)
+    return selected
 
 
 def build_cli_arguments(
@@ -217,7 +238,9 @@ def _load_gui_classes():
             source_box = QGroupBox("変換元")
             source_layout = QVBoxLayout(source_box)
             source_layout.setSpacing(8)
-            source_hint = QLabel(".fxp / .SerumPreset またはフォルダを追加（Finderからドロップできます）")
+            source_hint = QLabel(
+                ".fxp / .SerumPreset またはフォルダを追加（ファイル管理画面からドロップできます）"
+            )
             source_hint.setStyleSheet("color: palette(mid);")
             self.source_list = SourceListWidget()
             self.source_list.setMinimumHeight(56)
@@ -314,7 +337,7 @@ def _load_gui_classes():
             outer.addWidget(self.log, 1)
 
             action_row = QHBoxLayout()
-            self.reveal_button = QPushButton("出力先をFinderで開く")
+            self.reveal_button = QPushButton("出力先を開く")
             self.reveal_button.clicked.connect(self._reveal_output)
             self.cancel_button = QPushButton("キャンセル")
             self.cancel_button.clicked.connect(self._cancel)
@@ -456,7 +479,7 @@ def _load_gui_classes():
             self._failed_count = 0
             self.status_label.setText("プリセットを検索しています…")
             self.progress_bar.setRange(0, 0)
-            self._process.setProgram(sys.executable)
+            self._process.setProgram(worker_python_executable())
             self._process.setArguments(arguments)
             self._process.start()
             self._update_actions()

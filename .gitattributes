@@ -1,4 +1,5 @@
 * text=auto eol=lf
+*.cmd text eol=crlf
 *.fxp binary
 *.SerumPreset binary
 *.wav binary

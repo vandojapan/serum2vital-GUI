@@ -8,6 +8,7 @@ from serum2vital.gui import (
     ProgressLine,
     build_cli_arguments,
     parse_progress_line,
+    worker_python_executable,
 )
 
 
@@ -67,3 +68,13 @@ def test_parse_progress_line():
         detail="Bass.fxp output exists",
     )
     assert parse_progress_line("84 converted, 0 skipped, 0 failed (of 84)") is None
+
+
+def test_worker_uses_console_python_for_windows_gui_launcher(tmp_path):
+    pythonw = tmp_path / "pythonw.exe"
+    python = tmp_path / "python.exe"
+    pythonw.touch()
+    python.touch()
+
+    assert worker_python_executable(pythonw, platform="win32") == str(python)
+    assert worker_python_executable(pythonw, platform="darwin") == str(pythonw)
