@@ -22,11 +22,15 @@ dependencies = []
 
 [project.optional-dependencies]
 serum2 = ["zstandard", "cbor2"]
+gui = ["PySide6-Essentials>=6.5,<7"]
 hosts = ["numpy", "pedalboard", "dawdreamer", "mido", "soundfile"]
 dev = ["pytest", "zstandard", "cbor2", "numpy"]
 
 [project.scripts]
 serum2vital = "serum2vital.convert:main"
+
+[project.gui-scripts]
+serum2vital-gui = "serum2vital.gui:main"
 
 [project.urls]
 Homepage = "https://github.com/btesser/serum2vital"

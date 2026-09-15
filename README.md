@@ -30,6 +30,21 @@ pip install .[serum2]    # adds zstandard + cbor2 for Serum 2 presets
 Python 3.9 or newer. This installs a `serum2vital` command; `python -m serum2vital`
 works from a checkout without installing.
 
+### macOS GUI
+
+Install the optional Qt interface, then open the one-window converter:
+
+```bash
+pip install ".[gui,serum2]"
+serum2vital-gui
+```
+
+You can add multiple preset files or folders (including by dragging them from
+Finder), choose the optional Serum data folder and a required output folder,
+then follow or cancel the conversion from the progress log. From a repository
+checkout, you can also double-click `Serum2Vital.command` in Finder after the
+GUI dependencies are installed.
+
 ## Usage
 
 Nothing is written unless you pass `--out`, so start with a dry run that only
