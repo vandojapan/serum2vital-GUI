@@ -1,4 +1,4 @@
-"""Small desktop front end for :mod:`serum2vital` on macOS and Windows.
+"""Small desktop front end for :mod:`serum2vital` on macOS, Windows and Linux.
 
 The GUI deliberately runs the existing command line interface in a child
 process.  That keeps one conversion path, makes cancellation reliable, and
@@ -22,6 +22,7 @@ LAYOUT_FLATTEN = "flatten"
 LAYOUTS = {LAYOUT_PRESERVE, LAYOUT_ORGANIZE, LAYOUT_FLATTEN}
 BRAND_LIGHT = ("#006b7a", "#6f42c1")
 BRAND_DARK = ("#67e8f9", "#c4b5fd")
+WORKER_BASENAME = "serum2vital-worker"
 
 
 def worker_python_executable(
@@ -45,7 +46,7 @@ def worker_python_executable(
     return selected
 
 
-def build_cli_arguments(
+def build_conversion_arguments(
     inputs: Sequence[str | os.PathLike[str]],
     output: str | os.PathLike[str],
     *,
@@ -56,12 +57,11 @@ def build_cli_arguments(
     overwrite: bool = False,
     max_frames: int = 64,
 ) -> list[str]:
-    """Build arguments for ``sys.executable`` from the desktop form values.
+    """Build converter arguments from the desktop form values.
 
-    ``-u`` is intentional: the GUI consumes the verbose output as progress,
-    and a child Python process connected to a pipe would otherwise buffer it.
-    Keeping this function free of Qt imports also makes the command mapping
-    testable when the optional GUI dependency is not installed.
+    These arguments contain no Python interpreter options, so the same list
+    works with both ``python -m serum2vital`` during development and the
+    bundled worker executable in a frozen desktop build.
     """
     input_strings = [os.fspath(path) for path in inputs]
     output_string = os.fspath(output)
@@ -75,9 +75,6 @@ def build_cli_arguments(
         raise ValueError("max_frames must be at least 1")
 
     arguments = [
-        "-u",
-        "-m",
-        "serum2vital",
         *input_strings,
         "--out",
         output_string,
@@ -98,6 +95,57 @@ def build_cli_arguments(
         arguments.append("--overwrite")
     arguments.append("-v")
     return arguments
+
+
+def build_cli_arguments(
+    inputs: Sequence[str | os.PathLike[str]],
+    output: str | os.PathLike[str],
+    **options,
+) -> list[str]:
+    """Build the legacy ``python -m serum2vital`` argument list.
+
+    Retaining this small wrapper keeps the command mapping useful to callers
+    while :func:`build_conversion_arguments` is used by packaged builds.
+    ``-u`` makes progress lines available immediately through ``QProcess``.
+    """
+    return [
+        "-u",
+        "-m",
+        "serum2vital",
+        *build_conversion_arguments(inputs, output, **options),
+    ]
+
+
+def bundled_worker_executable(
+    executable: str | os.PathLike[str] | None = None,
+    *,
+    platform: str | None = None,
+) -> str:
+    """Return the worker placed next to a frozen GUI executable."""
+    selected = Path(os.fspath(executable) if executable is not None else sys.executable)
+    current_platform = platform if platform is not None else sys.platform
+    suffix = ".exe" if current_platform.startswith("win") else ""
+    return str(selected.with_name(f"{WORKER_BASENAME}{suffix}"))
+
+
+def build_worker_invocation(
+    conversion_arguments: Sequence[str],
+    *,
+    frozen: bool | None = None,
+    executable: str | os.PathLike[str] | None = None,
+    platform: str | None = None,
+) -> tuple[str, list[str]]:
+    """Return the program and arguments used by the GUI conversion worker."""
+    is_frozen = bool(getattr(sys, "frozen", False)) if frozen is None else frozen
+    if is_frozen:
+        return (
+            bundled_worker_executable(executable, platform=platform),
+            list(conversion_arguments),
+        )
+    return (
+        worker_python_executable(executable, platform=platform),
+        ["-u", "-m", "serum2vital", *conversion_arguments],
+    )
 
 
 _PROGRESS_RE = re.compile(r"^\[(\d+)/(\d+)\]\s+(ok|skipped|failed)\s+(.*)$")
@@ -480,7 +528,7 @@ def _load_gui_classes():
                 return
 
             try:
-                arguments = build_cli_arguments(
+                conversion_arguments = build_conversion_arguments(
                     inputs,
                     str(output_path),
                     serum_root=serum_root,
@@ -494,6 +542,15 @@ def _load_gui_classes():
                 QMessageBox.warning(self, "入力を確認してください", str(exc))
                 return
 
+            program, arguments = build_worker_invocation(conversion_arguments)
+            if getattr(sys, "frozen", False) and not Path(program).is_file():
+                QMessageBox.critical(
+                    self,
+                    "変換プログラムが見つかりません",
+                    "アプリのファイルが不足しています。配布アーカイブをもう一度展開してください。",
+                )
+                return
+
             self.log.clear()
             self.log.appendPlainText("変換を開始します…")
             self._line_buffer = ""
@@ -501,7 +558,7 @@ def _load_gui_classes():
             self._failed_count = 0
             self.status_label.setText("プリセットを検索しています…")
             self.progress_bar.setRange(0, 0)
-            self._process.setProgram(worker_python_executable())
+            self._process.setProgram(program)
             self._process.setArguments(arguments)
             self._process.start()
             self._update_actions()
@@ -603,6 +660,22 @@ def _load_gui_classes():
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Launch the desktop application."""
+    arguments = list(argv) if argv is not None else list(sys.argv)
+    smoke_test = "--smoke-test" in arguments[1:]
+    if smoke_test:
+        arguments.remove("--smoke-test")
+    smoke_worker: tuple[str, str] | None = None
+    if "--smoke-worker" in arguments[1:]:
+        option_index = arguments.index("--smoke-worker")
+        if len(arguments) < option_index + 3:
+            print("--smoke-worker requires INPUT and OUTPUT", file=sys.stderr)
+            return 2
+        smoke_worker = (
+            arguments[option_index + 1],
+            arguments[option_index + 2],
+        )
+        del arguments[option_index : option_index + 3]
+
     try:
         QApplication, MainWindow = _load_gui_classes()
     except ModuleNotFoundError as exc:
@@ -614,11 +687,27 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 2
         raise
 
-    app = QApplication(list(argv) if argv is not None else sys.argv)
+    app = QApplication(arguments)
     app.setApplicationName("serum2vital")
     app.setOrganizationName("serum2vital")
     window = MainWindow()
     window.show()
+    if smoke_worker is not None:
+        source, output = smoke_worker
+        window._add_paths([source])
+        window.output_edit.setText(output)
+        window.wavetables_check.setChecked(False)
+        window.samples_check.setChecked(False)
+        window._process.finished.connect(
+            lambda exit_code, _exit_status: app.exit(0 if exit_code == 0 else 1)
+        )
+        window._process.errorOccurred.connect(lambda _error: app.exit(1))
+        window._start()
+        return app.exec()
+    if smoke_test:
+        app.processEvents()
+        window.close()
+        return 0
     return app.exec()
 
 

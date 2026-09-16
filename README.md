@@ -30,7 +30,7 @@ pip install .[serum2]    # adds zstandard + cbor2 for Serum 2 presets
 Python 3.9 or newer. This installs a `serum2vital` command; `python -m serum2vital`
 works from a checkout without installing.
 
-### Desktop GUI (macOS / Windows)
+### Desktop GUI (macOS / Windows / Linux)
 
 Install the optional Qt interface, then open the one-window converter:
 
@@ -44,6 +44,56 @@ Finder or File Explorer), choose the optional Serum data folder and a required
 output folder, then follow or cancel the conversion from the progress log. From
 a repository checkout, you can also double-click `Serum2Vital.command` on macOS
 or `Serum2Vital.cmd` on Windows after the GUI dependencies are installed.
+
+### Standalone desktop packages (macOS / Windows / Linux)
+
+The packaged application includes Python, Qt, the Serum 2 readers and a separate
+conversion worker. End users can open it without installing Python or running
+`pip`.
+
+Release CI uses pinned dependencies and Python 3.12. The current standalone
+targets are macOS 13 or newer, Windows 10 version 1809 or newer, and x86_64
+Linux distributions with glibc 2.34 or newer (including Ubuntu 22.04).
+
+Build on macOS or Linux:
+
+```bash
+python3 -m pip install -e ".[desktop,package]"
+python3 desktop/build.py
+```
+
+Build from Windows PowerShell or Command Prompt:
+
+```bat
+py -m pip install -e ".[desktop,package]"
+py desktop\build.py
+```
+
+The script builds the native application, converts one Serum 1 and one Serum 2
+fixture with the bundled worker, opens the packaged GUI in offscreen smoke-test
+mode, and writes a distributable archive under `dist/packages/`:
+
+- macOS: `Serum2Vital-<version>-macos-<arch>.zip` containing `Serum2Vital.app`
+- Windows: `Serum2Vital-<version>-windows-<arch>.zip`
+- Linux: `Serum2Vital-<version>-linux-<arch>.tar.gz`
+
+Each archive has a matching `.sha256` checksum file.
+
+After extracting the archive, open `Serum2Vital.app` on macOS,
+`Serum2Vital\Serum2Vital.exe` on Windows, or
+`./Serum2Vital/Serum2Vital` on Linux. Keep the whole extracted folder together:
+the adjacent `serum2vital-worker` and, where present, `_internal` files are part
+of the app.
+
+PyInstaller builds for the operating system it is running on; it does not
+cross-compile. The `Package desktop apps` GitHub Actions workflow therefore
+builds macOS arm64/x86_64, Windows x86_64 and Linux x86_64 in parallel. The
+workflow uploads temporary artifacts for pull requests and manual runs; a
+matching `v<version>` tag publishes the archives to a GitHub Release. The
+generated applications are not yet signed with public distribution
+certificates, so macOS Gatekeeper or Windows SmartScreen may warn when they are
+downloaded. Public releases should add Apple Developer ID notarization and
+Windows code signing.
 
 ## Usage
 

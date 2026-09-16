@@ -380,8 +380,13 @@ def main(argv: list[str] | None = None) -> int:
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
             try:
-                stream.reconfigure(encoding="utf-8", errors="replace")
-            except (ValueError, OSError):
+                stream.reconfigure(
+                    encoding="utf-8",
+                    errors="replace",
+                    line_buffering=True,
+                    write_through=True,
+                )
+            except (TypeError, ValueError, OSError):
                 pass
     parser = argparse.ArgumentParser(
         prog="serum2vital",

@@ -8,7 +8,10 @@ from serum2vital.gui import (
     LAYOUT_FLATTEN,
     LAYOUT_ORGANIZE,
     ProgressLine,
+    build_conversion_arguments,
     build_cli_arguments,
+    build_worker_invocation,
+    bundled_worker_executable,
     parse_progress_line,
     worker_python_executable,
 )
@@ -54,6 +57,53 @@ def test_build_cli_arguments_maps_every_gui_option():
     assert "--no-wavetables" in arguments
     assert "--no-samples" in arguments
     assert "--overwrite" in arguments
+
+
+def test_conversion_arguments_do_not_contain_python_launcher_options():
+    arguments = build_conversion_arguments(
+        ["/プリセット/one preset.fxp", "/presets/✨.SerumPreset"],
+        "/vital output",
+    )
+
+    assert arguments[:2] == [
+        "/プリセット/one preset.fxp",
+        "/presets/✨.SerumPreset",
+    ]
+    assert "-m" not in arguments
+    assert "-u" not in arguments
+
+
+def test_worker_invocation_uses_python_only_for_source_checkout(tmp_path):
+    python = tmp_path / "python"
+    conversion_arguments = ["日本語 preset.fxp", "--out", "Vital output", "-v"]
+
+    program, arguments = build_worker_invocation(
+        conversion_arguments,
+        frozen=False,
+        executable=python,
+        platform="darwin",
+    )
+
+    assert program == str(python)
+    assert arguments == ["-u", "-m", "serum2vital", *conversion_arguments]
+
+
+def test_worker_invocation_uses_adjacent_helper_when_frozen(tmp_path):
+    gui = tmp_path / "Program Files" / "Serum2Vital.exe"
+    conversion_arguments = ["日本語 preset.fxp", "--out", "Vital output", "-v"]
+
+    program, arguments = build_worker_invocation(
+        conversion_arguments,
+        frozen=True,
+        executable=gui,
+        platform="win32",
+    )
+
+    assert program == str(gui.with_name("serum2vital-worker.exe"))
+    assert arguments == conversion_arguments
+    assert bundled_worker_executable(gui, platform="linux") == str(
+        gui.with_name("serum2vital-worker")
+    )
 
 
 def test_build_cli_arguments_uses_only_one_layout_flag():

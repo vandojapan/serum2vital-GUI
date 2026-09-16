@@ -23,6 +23,8 @@ dependencies = []
 [project.optional-dependencies]
 serum2 = ["zstandard", "cbor2"]
 gui = ["PySide6-Essentials>=6.5,<7"]
+desktop = ["PySide6-Essentials==6.11.0", "zstandard==0.25.0", "cbor2==6.1.4"]
+package = ["PyInstaller==6.22.3"]
 hosts = ["numpy", "pedalboard", "dawdreamer", "mido", "soundfile"]
 dev = ["pytest", "zstandard", "cbor2", "numpy"]
 
