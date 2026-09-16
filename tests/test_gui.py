@@ -3,6 +3,8 @@ from pathlib import Path
 import pytest
 
 from serum2vital.gui import (
+    BRAND_DARK,
+    BRAND_LIGHT,
     LAYOUT_FLATTEN,
     LAYOUT_ORGANIZE,
     ProgressLine,
@@ -10,6 +12,24 @@ from serum2vital.gui import (
     parse_progress_line,
     worker_python_executable,
 )
+
+
+def _relative_luminance(color: str) -> float:
+    channels = [int(color[index : index + 2], 16) / 255 for index in (1, 3, 5)]
+    linear = [
+        channel / 12.92
+        if channel <= 0.04045
+        else ((channel + 0.055) / 1.055) ** 2.4
+        for channel in channels
+    ]
+    return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+
+
+def _contrast_ratio(first: str, second: str) -> float:
+    lighter, darker = sorted(
+        (_relative_luminance(first), _relative_luminance(second)), reverse=True
+    )
+    return (lighter + 0.05) / (darker + 0.05)
 
 
 def test_build_cli_arguments_maps_every_gui_option():
@@ -78,3 +98,11 @@ def test_worker_uses_console_python_for_windows_gui_launcher(tmp_path):
 
     assert worker_python_executable(pythonw, platform="win32") == str(python)
     assert worker_python_executable(pythonw, platform="darwin") == str(pythonw)
+
+
+@pytest.mark.parametrize(
+    ("colors", "background"),
+    [(BRAND_LIGHT, "#efefef"), (BRAND_DARK, "#353535")],
+)
+def test_brand_colors_remain_readable_in_both_themes(colors, background):
+    assert all(_contrast_ratio(color, background) >= 4.5 for color in colors)

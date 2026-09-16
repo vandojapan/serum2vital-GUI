@@ -20,6 +20,8 @@ LAYOUT_PRESERVE = "preserve"
 LAYOUT_ORGANIZE = "organize"
 LAYOUT_FLATTEN = "flatten"
 LAYOUTS = {LAYOUT_PRESERVE, LAYOUT_ORGANIZE, LAYOUT_FLATTEN}
+BRAND_LIGHT = ("#006b7a", "#6f42c1")
+BRAND_DARK = ("#67e8f9", "#c4b5fd")
 
 
 def worker_python_executable(
@@ -127,8 +129,14 @@ def parse_progress_line(line: str) -> ProgressLine | None:
 
 def _load_gui_classes():
     """Import the optional Qt dependency and construct the two widget classes."""
-    from PySide6.QtCore import QProcess, QTimer, Qt, QUrl, Signal
-    from PySide6.QtGui import QCloseEvent, QDesktopServices, QDragEnterEvent, QDropEvent
+    from PySide6.QtCore import QEvent, QProcess, QTimer, Qt, QUrl, Signal
+    from PySide6.QtGui import (
+        QCloseEvent,
+        QDesktopServices,
+        QDragEnterEvent,
+        QDropEvent,
+        QPalette,
+    )
     from PySide6.QtWidgets import (
         QAbstractItemView,
         QApplication,
@@ -222,16 +230,12 @@ def _load_gui_classes():
             outer.setContentsMargins(24, 20, 24, 20)
             outer.setSpacing(12)
 
-            brand = QLabel(
-                '<span style="font-size:28px; font-weight:650">serum</span>'
-                '<span style="font-size:28px; font-weight:700; color:#20bfd8">2</span>'
-                '<span style="font-size:28px; font-weight:650; color:#9164e8">vital</span>'
-            )
+            self.brand = QLabel()
+            self._refresh_brand_colors()
             tagline = QLabel("Serum 1 / 2 のプリセットを Vital へ変換")
-            tagline.setStyleSheet("color: palette(mid);")
             heading = QVBoxLayout()
             heading.setSpacing(1)
-            heading.addWidget(brand)
+            heading.addWidget(self.brand)
             heading.addWidget(tagline)
             outer.addLayout(heading)
 
@@ -241,7 +245,6 @@ def _load_gui_classes():
             source_hint = QLabel(
                 ".fxp / .SerumPreset またはフォルダを追加（ファイル管理画面からドロップできます）"
             )
-            source_hint.setStyleSheet("color: palette(mid);")
             self.source_list = SourceListWidget()
             self.source_list.setMinimumHeight(56)
             self.source_list.setMaximumHeight(120)
@@ -351,6 +354,25 @@ def _load_gui_classes():
             outer.addLayout(action_row)
 
             self.setCentralWidget(central)
+
+        def _refresh_brand_colors(self) -> None:
+            palette = self.palette()
+            background = palette.color(QPalette.ColorRole.Window)
+            foreground = palette.color(QPalette.ColorRole.WindowText).name()
+            cyan, purple = BRAND_DARK if background.lightnessF() < 0.5 else BRAND_LIGHT
+            self.brand.setText(
+                f'<span style="font-size:28px; font-weight:650; color:{foreground}">serum</span>'
+                f'<span style="font-size:28px; font-weight:700; color:{cyan}">2</span>'
+                f'<span style="font-size:28px; font-weight:650; color:{purple}">vital</span>'
+            )
+
+        def changeEvent(self, event) -> None:
+            super().changeEvent(event)
+            if hasattr(self, "brand") and event.type() in (
+                QEvent.Type.PaletteChange,
+                QEvent.Type.ApplicationPaletteChange,
+            ):
+                self._refresh_brand_colors()
 
         def _choose_files(self) -> None:
             paths, _ = QFileDialog.getOpenFileNames(
